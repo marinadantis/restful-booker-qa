@@ -20,7 +20,7 @@ test("PUT should be idempotent when the same payload is sent three times", async
 
   const token = await tokenManager.getToken();
 
-  const bookingApi = new BookingApi(request);
+  const bookingApi = new BookingApi(request, tokenManager);
 
   let bookingId: number | undefined;
   try {
@@ -103,7 +103,7 @@ test("PATCH should update one field while preserving all other fields", async ({
 
   const token = await tokenManager.getToken();
 
-  const bookingApi = new BookingApi(request);
+  const bookingApi = new BookingApi(request, tokenManager);
 
   let bookingId: number | undefined;
   try {

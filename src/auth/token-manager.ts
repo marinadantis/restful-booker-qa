@@ -1,5 +1,4 @@
 import { APIRequestContext } from "@playwright/test";
-import { CLIENT_RENEG_WINDOW } from "node:tls";
 
 export interface AuthCredentials {
   username: string;
@@ -19,15 +18,18 @@ export class TokenManager {
     private readonly credentials: AuthCredentials,
   ) {}
 
-  async getToken(): Promise<string> {
+  async getToken(failedToken?: string): Promise<string> {
+    if (failedToken && this.token === failedToken) this.token = null;
+
     if (this.token) return this.token;
 
     if (!this.tokenPromise) this.tokenPromise = this.generateToken();
 
+    const pendingToken = this.tokenPromise;
     try {
       return await this.tokenPromise;
     } finally {
-      this.tokenPromise = null;
+      if (this.tokenPromise === pendingToken) this.tokenPromise = null;
     }
   }
 
@@ -45,7 +47,6 @@ export class TokenManager {
       throw new Error("Authentication response did not contain a token");
 
     this.token = body.token;
-
     return this.token;
   }
 
