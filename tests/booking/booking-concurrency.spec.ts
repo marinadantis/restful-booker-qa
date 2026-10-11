@@ -5,7 +5,7 @@ import { BookingApi } from "../../src/api/booking-api";
 import { Booking, BookingResponse } from "../../src/types/booking";
 import { isDeepStrictEqual } from "node:util";
 
-test("PATCH should update one field while preserving all other fields", async ({
+test("concurrent PUT requests should leave the booking in a valid final state", async ({
   request,
 }) => {
   const username = process.env.API_USERNAME;

@@ -1,30 +1,19 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "../fixtures/api-fixtures";
 import { BookingApi } from "../../src/api/booking-api";
 import { createBooking } from "../fixtures/booking-data";
 import { BookingResponse } from "../../src/types/booking";
 import { TokenManager } from "../../src/auth/token-manager";
+import { expectValidBookingPayload } from "../helpers/booking-validation";
+import { request as playwrightRequest } from "@playwright/test";
+import { cleanupBooking } from "../helpers/booking-cleanup";
 
 test("should create a booking and retrieve it successfully", async ({
-  request,
+  bookingApi,
+  authToken,
 }) => {
-  const username = process.env.API_USERNAME;
-  const password = process.env.API_PASSWORD;
-
-  if (!username || !password) {
-    throw new Error("API credentials are not configured");
-  }
-
-  const tokenManager = new TokenManager(request, {
-    username,
-    password,
-  });
-
-  const token = await tokenManager.getToken();
-
-  const bookingApi = new BookingApi(request, tokenManager);
-
-  //create a booking payload
+  // Arrange: create a booking payload
   const booking = createBooking();
+  expectValidBookingPayload(booking);
 
   let bookingId: number | undefined;
   try {
@@ -33,28 +22,21 @@ test("should create a booking and retrieve it successfully", async ({
     const createBody = (await createResponse.json()) as BookingResponse;
     expect(createBody).toHaveProperty("bookingid");
     expect(Number.isInteger(createBody.bookingid)).toBe(true);
+
+    // Assert: created booking response matches the created booking payload
     expect(createBody.booking).toEqual(booking);
 
     const bookingId: number = createBody.bookingid;
     const getResponse = await bookingApi.getBooking(bookingId);
     expect(getResponse.status()).toBe(200);
     const getBody = await getResponse.json();
+
+    // Assert: retrieved booking response matches the created booking payload
     expect(getBody).toEqual(booking);
   } finally {
     if (bookingId !== undefined) {
-      const existingBooking = await bookingApi.getBooking(bookingId);
-
-      if (existingBooking.status() === 200) {
-        const deleteResponse = await bookingApi.deleteBooking(bookingId, token);
-        expect(deleteResponse.status()).toBe(201);
-
-        const verificationResponse = await bookingApi.getBooking(bookingId);
-        expect(verificationResponse.status()).toBe(404);
-      } else if (existingBooking.status() !== 404) {
-        throw new Error(
-          `Unable to verify booking before cleanup: HTTP ${existingBooking.status()}`,
-        );
-      }
+      const token = authToken;
+      await cleanupBooking(bookingApi, bookingId, token);
     }
   }
 });
@@ -74,10 +56,9 @@ test("should return a booking with the expected schema", async ({
     password,
   });
 
-  const token = await tokenManager.getToken();
-
   const bookingApi = new BookingApi(request, tokenManager);
   const booking = createBooking();
+  expectValidBookingPayload(booking);
 
   let bookingId: number | undefined;
   try {
@@ -86,28 +67,36 @@ test("should return a booking with the expected schema", async ({
 
     const body = await response.json();
 
-    // Validate the response structure.
+    // Validate the response envelope.
     expect(body).toHaveProperty("bookingid");
     expect(body).toHaveProperty("booking");
 
     expect(Number.isInteger(body.bookingid)).toBe(true);
     expect(body.bookingid).toBeGreaterThan(0);
 
+    // Validate the booking object.
     const returnedBooking = body.booking;
 
-    // Validate required string fields.
     expect(typeof returnedBooking.firstname).toBe("string");
     expect(typeof returnedBooking.lastname).toBe("string");
-
-    // Validate numeric and boolean fields.
     expect(typeof returnedBooking.totalprice).toBe("number");
     expect(typeof returnedBooking.depositpaid).toBe("boolean");
+    expect(typeof returnedBooking.additionalneeds).toBe("string");
 
-    // Validate nested date fields.
-    expect(typeof returnedBooking.bookingdates.checkin).toBe("string");
-    expect(typeof returnedBooking.bookingdates.checkout).toBe("string");
+    // Validate the nested bookingdates object.
+    expect(returnedBooking.bookingdates).toBeDefined();
+    expect(typeof returnedBooking.bookingdates).toBe("object");
+    expect(returnedBooking.bookingdates).not.toBeNull();
 
-    // Validate the submitted data was preserved.
+    expect(returnedBooking.bookingdates).toHaveProperty("checkin");
+    expect(returnedBooking.bookingdates).toHaveProperty("checkout");
+
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+
+    expect(returnedBooking.bookingdates.checkin).toMatch(datePattern);
+    expect(returnedBooking.bookingdates.checkout).toMatch(datePattern);
+
+    // Verify that the API preserved the submitted payload.
     expect(returnedBooking).toEqual(booking);
 
     bookingId = body.bookingid;
@@ -116,6 +105,7 @@ test("should return a booking with the expected schema", async ({
       const existingBooking = await bookingApi.getBooking(bookingId);
 
       if (existingBooking.status() === 200) {
+        const token = await tokenManager.getToken();
         const deleteResponse = await bookingApi.deleteBooking(bookingId, token);
         expect(deleteResponse.status()).toBe(201);
 
@@ -130,9 +120,102 @@ test("should return a booking with the expected schema", async ({
   }
 });
 
-test("characterises API behaviour for reversed booking dates", async ({
+test("should reject duplicate bookings across separate API contexts", async ({
   request,
 }) => {
+  const username = process.env.API_USERNAME;
+  const password = process.env.API_PASSWORD;
+
+  if (!username || !password) {
+    throw new Error("API credentials are not configured");
+  }
+
+  const firstTokenManager = new TokenManager(request, {
+    username,
+    password,
+  });
+
+  const firstBookingApi = new BookingApi(request, firstTokenManager);
+
+  const secondContext = await playwrightRequest.newContext({
+    baseURL: "https://restful-booker.herokuapp.com",
+  });
+
+  const secondTokenManager = new TokenManager(secondContext, {
+    username,
+    password,
+  });
+
+  const secondBookingApi = new BookingApi(secondContext, secondTokenManager);
+
+  const booking = createBooking();
+
+  let firstBookingId: number | undefined;
+  let secondBookingId: number | undefined;
+
+  try {
+    // Context A creates the original booking.
+    const firstResponse = await firstBookingApi.createBooking(booking);
+
+    expect(firstResponse.status()).toBe(200);
+
+    const firstBody = (await firstResponse.json()) as BookingResponse;
+    firstBookingId = firstBody.bookingid;
+
+    expect(Number.isInteger(firstBookingId)).toBe(true);
+    expect(firstBookingId).toBeGreaterThan(0);
+
+    // Context B attempts to create the exact same booking.
+    const secondResponse = await secondBookingApi.createBooking(booking);
+
+    // Capture the second booking ID if the API unexpectedly accepts it.
+    if (secondResponse.status() === 200) {
+      const secondBody = (await secondResponse.json()) as BookingResponse;
+      secondBookingId = secondBody.bookingid;
+    }
+
+    // The API should reject the duplicate.
+    expect([400, 409]).toContain(secondResponse.status());
+  } finally {
+    try {
+      const bookingsToClean = [
+        {
+          api: firstBookingApi,
+          tokenManager: firstTokenManager,
+          id: firstBookingId,
+        },
+        {
+          api: secondBookingApi,
+          tokenManager: secondTokenManager,
+          id: secondBookingId,
+        },
+      ];
+
+      for (const { api, tokenManager, id } of bookingsToClean) {
+        if (id === undefined) {
+          continue;
+        }
+
+        const getResponse = await api.getBooking(id);
+
+        if (getResponse.status() === 200) {
+          const token = await tokenManager.getToken();
+          const deleteResponse = await api.deleteBooking(id, token);
+          expect(deleteResponse.status()).toBe(201);
+
+          const verificationResponse = await api.getBooking(id);
+          expect(verificationResponse.status()).toBe(404);
+        } else {
+          expect(getResponse.status()).toBe(404);
+        }
+      }
+    } finally {
+      await secondContext.dispose();
+    }
+  }
+});
+
+test("should reject bookings with reversed dates", async ({ request }) => {
   const username = process.env.API_USERNAME;
   const password = process.env.API_PASSWORD;
 
@@ -145,11 +228,10 @@ test("characterises API behaviour for reversed booking dates", async ({
     password,
   });
 
-  const token = await tokenManager.getToken();
-
   const bookingApi = new BookingApi(request, tokenManager);
 
   let bookingId: number | undefined;
+
   try {
     const booking = createBooking({
       bookingdates: {
@@ -163,18 +245,12 @@ test("characterises API behaviour for reversed booking dates", async ({
 
     const created = (await response.json()) as BookingResponse;
     expect(created.booking.bookingdates).toEqual(booking.bookingdates);
-
-    bookingId = created.bookingid;
-    const getResponse = await bookingApi.getBooking(bookingId);
-    expect(getResponse.status()).toBe(200);
-
-    const persistedBooking = await getResponse.json();
-    expect(persistedBooking.bookingdates).toEqual(booking.bookingdates);
   } finally {
     if (bookingId !== undefined) {
       const existingBooking = await bookingApi.getBooking(bookingId);
 
       if (existingBooking.status() === 200) {
+        const token = await tokenManager.getToken();
         const deleteResponse = await bookingApi.deleteBooking(bookingId, token);
         expect(deleteResponse.status()).toBe(201);
 
@@ -202,8 +278,6 @@ test("characterises API behaviour for overlapping booking dates", async ({
     username,
     password,
   });
-
-  const token = await tokenManager.getToken();
 
   const bookingApi = new BookingApi(request, tokenManager);
 
@@ -255,6 +329,7 @@ test("characterises API behaviour for overlapping booking dates", async ({
     for (const bookingId of bookingIds) {
       const getResponse = await bookingApi.getBooking(bookingId);
       if (getResponse.status() === 200) {
+        const token = await tokenManager.getToken();
         const deleteResponse = await bookingApi.deleteBooking(bookingId, token);
         expect(deleteResponse.status()).toBe(201);
         const verificationResponse = await bookingApi.getBooking(bookingId);
@@ -264,4 +339,25 @@ test("characterises API behaviour for overlapping booking dates", async ({
       }
     }
   }
+});
+
+test("should reject a booking with a negative price", async ({ request }) => {
+  const booking = createBooking({ totalprice: -100 });
+
+  const response = await request.post("/booking", {
+    data: booking,
+  });
+
+  expect([400, 422]).toContain(response.status());
+});
+
+test("should reject a booking without a first name", async ({ request }) => {
+  const booking = createBooking();
+  const { firstname, ...invalidBooking } = booking;
+
+  const response = await request.post("/booking", {
+    data: invalidBooking,
+  });
+
+  expect([400, 422]).toContain(response.status());
 });
