@@ -4,7 +4,7 @@
 **Assessment:** Senior Engineer – Technology Quality Assurance  
 **Framework:** TypeScript + Playwright Test  
 **Target API:** https://restful-booker.herokuapp.com
-**Date:** October 12, 2026  
+
 ---
 
 ## Executive Summary
