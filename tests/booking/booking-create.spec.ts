@@ -1,7 +1,7 @@
 import { test, expect } from "../fixtures/api-fixtures";
 import { BookingApi } from "../../src/api/booking-api";
 import { createBooking } from "../fixtures/booking-data";
-import { BookingResponse } from "../../src/types/booking";
+import { Booking, BookingResponse } from "../../src/types/booking";
 import { TokenManager } from "../../src/auth/token-manager";
 import { expectValidBookingPayload } from "../helpers/booking-validation";
 import { request as playwrightRequest } from "@playwright/test";
@@ -26,7 +26,7 @@ test("should create a booking and retrieve it successfully", async ({
     // Assert: created booking response matches the created booking payload
     expect(createBody.booking).toEqual(booking);
 
-    const bookingId: number = createBody.bookingid;
+    bookingId = createBody.bookingid;
     const getResponse = await bookingApi.getBooking(bookingId);
     expect(getResponse.status()).toBe(200);
     const getBody = await getResponse.json();
@@ -42,21 +42,9 @@ test("should create a booking and retrieve it successfully", async ({
 });
 
 test("should return a booking with the expected schema", async ({
-  request,
+  bookingApi,
+  authToken,
 }) => {
-  const username = process.env.API_USERNAME;
-  const password = process.env.API_PASSWORD;
-
-  if (!username || !password) {
-    throw new Error("API credentials are not configured");
-  }
-
-  const tokenManager = new TokenManager(request, {
-    username,
-    password,
-  });
-
-  const bookingApi = new BookingApi(request, tokenManager);
   const booking = createBooking();
   expectValidBookingPayload(booking);
 
@@ -102,26 +90,15 @@ test("should return a booking with the expected schema", async ({
     bookingId = body.bookingid;
   } finally {
     if (bookingId !== undefined) {
-      const existingBooking = await bookingApi.getBooking(bookingId);
-
-      if (existingBooking.status() === 200) {
-        const token = await tokenManager.getToken();
-        const deleteResponse = await bookingApi.deleteBooking(bookingId, token);
-        expect(deleteResponse.status()).toBe(201);
-
-        const verificationResponse = await bookingApi.getBooking(bookingId);
-        expect(verificationResponse.status()).toBe(404);
-      } else if (existingBooking.status() !== 404) {
-        throw new Error(
-          `Unable to verify booking before cleanup: HTTP ${existingBooking.status()}`,
-        );
-      }
+      const token = authToken;
+      await cleanupBooking(bookingApi, bookingId, token);
     }
   }
 });
 
 test("should reject duplicate bookings across separate API contexts", async ({
-  request,
+  bookingApi,
+  authToken,
 }) => {
   const username = process.env.API_USERNAME;
   const password = process.env.API_PASSWORD;
@@ -129,13 +106,6 @@ test("should reject duplicate bookings across separate API contexts", async ({
   if (!username || !password) {
     throw new Error("API credentials are not configured");
   }
-
-  const firstTokenManager = new TokenManager(request, {
-    username,
-    password,
-  });
-
-  const firstBookingApi = new BookingApi(request, firstTokenManager);
 
   const secondContext = await playwrightRequest.newContext({
     baseURL: "https://restful-booker.herokuapp.com",
@@ -155,7 +125,7 @@ test("should reject duplicate bookings across separate API contexts", async ({
 
   try {
     // Context A creates the original booking.
-    const firstResponse = await firstBookingApi.createBooking(booking);
+    const firstResponse = await bookingApi.createBooking(booking);
 
     expect(firstResponse.status()).toBe(200);
 
@@ -178,36 +148,14 @@ test("should reject duplicate bookings across separate API contexts", async ({
     expect([400, 409]).toContain(secondResponse.status());
   } finally {
     try {
-      const bookingsToClean = [
-        {
-          api: firstBookingApi,
-          tokenManager: firstTokenManager,
-          id: firstBookingId,
-        },
-        {
-          api: secondBookingApi,
-          tokenManager: secondTokenManager,
-          id: secondBookingId,
-        },
-      ];
+      if (firstBookingId !== undefined) {
+        const token = authToken;
+        await cleanupBooking(bookingApi, firstBookingId, token);
+      }
 
-      for (const { api, tokenManager, id } of bookingsToClean) {
-        if (id === undefined) {
-          continue;
-        }
-
-        const getResponse = await api.getBooking(id);
-
-        if (getResponse.status() === 200) {
-          const token = await tokenManager.getToken();
-          const deleteResponse = await api.deleteBooking(id, token);
-          expect(deleteResponse.status()).toBe(201);
-
-          const verificationResponse = await api.getBooking(id);
-          expect(verificationResponse.status()).toBe(404);
-        } else {
-          expect(getResponse.status()).toBe(404);
-        }
+      if (secondBookingId !== undefined) {
+        const secondToken = await secondTokenManager.getToken();
+        await cleanupBooking(secondBookingApi, secondBookingId, secondToken);
       }
     } finally {
       await secondContext.dispose();
@@ -215,21 +163,10 @@ test("should reject duplicate bookings across separate API contexts", async ({
   }
 });
 
-test("should reject bookings with reversed dates", async ({ request }) => {
-  const username = process.env.API_USERNAME;
-  const password = process.env.API_PASSWORD;
-
-  if (!username || !password) {
-    throw new Error("API credentials are not configured");
-  }
-
-  const tokenManager = new TokenManager(request, {
-    username,
-    password,
-  });
-
-  const bookingApi = new BookingApi(request, tokenManager);
-
+test("should reject bookings with reversed dates", async ({
+  bookingApi,
+  authToken,
+}) => {
   let bookingId: number | undefined;
 
   try {
@@ -244,43 +181,20 @@ test("should reject bookings with reversed dates", async ({ request }) => {
     expect(response.status()).toBe(200);
 
     const created = (await response.json()) as BookingResponse;
+    bookingId = created.bookingid;
     expect(created.booking.bookingdates).toEqual(booking.bookingdates);
   } finally {
     if (bookingId !== undefined) {
-      const existingBooking = await bookingApi.getBooking(bookingId);
-
-      if (existingBooking.status() === 200) {
-        const token = await tokenManager.getToken();
-        const deleteResponse = await bookingApi.deleteBooking(bookingId, token);
-        expect(deleteResponse.status()).toBe(201);
-
-        const verificationResponse = await bookingApi.getBooking(bookingId);
-        expect(verificationResponse.status()).toBe(404);
-      } else if (existingBooking.status() !== 404) {
-        throw new Error(
-          `Unable to verify booking before cleanup: HTTP ${existingBooking.status()}`,
-        );
-      }
+      const token = authToken;
+      await cleanupBooking(bookingApi, bookingId, token);
     }
   }
 });
 
 test("characterises API behaviour for overlapping booking dates", async ({
-  request,
+  bookingApi,
+  authToken,
 }) => {
-  const username = process.env.API_USERNAME;
-  const password = process.env.API_PASSWORD;
-
-  if (!username || !password)
-    throw new Error("API credentials are not configured");
-
-  const tokenManager = new TokenManager(request, {
-    username,
-    password,
-  });
-
-  const bookingApi = new BookingApi(request, tokenManager);
-
   let firstBookingId: number | undefined;
   let secondBookingId: number | undefined;
   try {
@@ -322,42 +236,30 @@ test("characterises API behaviour for overlapping booking dates", async ({
     expect(await firstGetResponse.json()).toEqual(firstBooking);
     expect(await secondGetResponse.json()).toEqual(secondBooking);
   } finally {
-    const bookingIds = [firstBookingId, secondBookingId].filter(
-      (id): id is number => id !== undefined,
-    );
-
-    for (const bookingId of bookingIds) {
-      const getResponse = await bookingApi.getBooking(bookingId);
-      if (getResponse.status() === 200) {
-        const token = await tokenManager.getToken();
-        const deleteResponse = await bookingApi.deleteBooking(bookingId, token);
-        expect(deleteResponse.status()).toBe(201);
-        const verificationResponse = await bookingApi.getBooking(bookingId);
-        expect(verificationResponse.status()).toBe(404);
-      } else {
-        expect(getResponse.status()).toBe(404);
+    const token = authToken;
+    for (const id of [firstBookingId, secondBookingId]) {
+      if (id !== undefined) {
+        await cleanupBooking(bookingApi, id, token);
       }
     }
   }
 });
 
-test("should reject a booking with a negative price", async ({ request }) => {
+test("should reject a booking with a negative price", async ({
+  bookingApi,
+}) => {
   const booking = createBooking({ totalprice: -100 });
 
-  const response = await request.post("/booking", {
-    data: booking,
-  });
+  const response = await bookingApi.createBooking(booking);
 
   expect([400, 422]).toContain(response.status());
 });
 
-test("should reject a booking without a first name", async ({ request }) => {
+test("should reject a booking without a first name", async ({ bookingApi }) => {
   const booking = createBooking();
   const { firstname, ...invalidBooking } = booking;
 
-  const response = await request.post("/booking", {
-    data: invalidBooking,
-  });
+  const response = await bookingApi.createBooking(invalidBooking as Booking);
 
   expect([400, 422]).toContain(response.status());
 });

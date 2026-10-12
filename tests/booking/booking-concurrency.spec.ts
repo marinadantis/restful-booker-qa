@@ -1,28 +1,13 @@
-import { test, expect } from "@playwright/test";
-import { TokenManager } from "../../src/auth/token-manager";
+import { test, expect } from "../fixtures/api-fixtures";
 import { createBooking } from "../fixtures/booking-data";
-import { BookingApi } from "../../src/api/booking-api";
 import { Booking, BookingResponse } from "../../src/types/booking";
 import { isDeepStrictEqual } from "node:util";
+import { cleanupBooking } from "../helpers/booking-cleanup";
 
 test("concurrent PUT requests should leave the booking in a valid final state", async ({
-  request,
+  bookingApi,
+  authToken,
 }) => {
-  const username = process.env.API_USERNAME;
-  const password = process.env.API_PASSWORD;
-
-  if (!username || !password)
-    throw new Error("API credentials are not configured");
-
-  const tokenManager = new TokenManager(request, {
-    username,
-    password,
-  });
-
-  const token = await tokenManager.getToken();
-
-  const bookingApi = new BookingApi(request, tokenManager);
-
   let bookingId: number | undefined;
   try {
     // Arrange: create a booking we control.
@@ -32,7 +17,7 @@ test("concurrent PUT requests should leave the booking in a valid final state", 
     expect(createResponse.status()).toBe(200);
 
     const createdBooking = (await createResponse.json()) as BookingResponse;
-    const bookingId: number = createdBooking.bookingid;
+    bookingId = createdBooking.bookingid;
 
     // Create two distinct, complete PUT payloads.
     const payloadA: Booking = {
@@ -49,8 +34,8 @@ test("concurrent PUT requests should leave the booking in a valid final state", 
 
     // Act: initiate both updates concurrently.
     const [responseA, responseB] = await Promise.all([
-      bookingApi.updateBooking(bookingId, payloadA, token),
-      bookingApi.updateBooking(bookingId, payloadB, token),
+      bookingApi.updateBooking(bookingId, payloadA, authToken),
+      bookingApi.updateBooking(bookingId, payloadB, authToken),
     ]);
 
     // Both requests should succeed if the API accepts both writes.
@@ -73,19 +58,8 @@ test("concurrent PUT requests should leave the booking in a valid final state", 
     ).toBe(true);
   } finally {
     if (bookingId !== undefined) {
-      const existingBooking = await bookingApi.getBooking(bookingId);
-
-      if (existingBooking.status() === 200) {
-        const deleteResponse = await bookingApi.deleteBooking(bookingId, token);
-        expect(deleteResponse.status()).toBe(201);
-
-        const verificationResponse = await bookingApi.getBooking(bookingId);
-        expect(verificationResponse.status()).toBe(404);
-      } else if (existingBooking.status() !== 404) {
-        throw new Error(
-          `Unable to verify booking before cleanup: HTTP ${existingBooking.status()}`,
-        );
-      }
+      const token = authToken;
+      await cleanupBooking(bookingApi, bookingId, token);
     }
   }
 });

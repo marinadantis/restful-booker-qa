@@ -1,27 +1,12 @@
-import { test, expect } from "@playwright/test";
-import { TokenManager } from "../../src/auth/token-manager";
+import { test, expect } from "../fixtures/api-fixtures";
 import { createBooking } from "../fixtures/booking-data";
-import { BookingApi } from "../../src/api/booking-api";
 import { Booking, BookingResponse } from "../../src/types/booking";
+import { cleanupBooking } from "../helpers/booking-cleanup";
 
 test("PUT should be idempotent when the same payload is sent three times", async ({
-  request,
+  bookingApi,
+  authToken,
 }) => {
-  const username = process.env.API_USERNAME;
-  const password = process.env.API_PASSWORD;
-
-  if (!username || !password)
-    throw new Error("API credentials are not configured");
-
-  const tokenManager = new TokenManager(request, {
-    username,
-    password,
-  });
-
-  const token = await tokenManager.getToken();
-
-  const bookingApi = new BookingApi(request, tokenManager);
-
   let bookingId: number | undefined;
   try {
     // Arrange: create a booking we control.
@@ -31,7 +16,7 @@ test("PUT should be idempotent when the same payload is sent three times", async
     expect(createResponse.status()).toBe(200);
 
     const createBody = (await createResponse.json()) as BookingResponse;
-    const bookingId: number = createBody.bookingid;
+    bookingId = createBody.bookingid;
 
     // Act: define the complete replacement payload.
     const updatedBooking = {
@@ -48,7 +33,7 @@ test("PUT should be idempotent when the same payload is sent three times", async
       const updateResponse = await bookingApi.updateBooking(
         bookingId,
         updatedBooking,
-        token,
+        authToken,
       );
       expect(updateResponse.status()).toBe(200);
 
@@ -70,41 +55,16 @@ test("PUT should be idempotent when the same payload is sent three times", async
     expect(snapshots[2]).toEqual(snapshots[0]);
   } finally {
     if (bookingId !== undefined) {
-      const existingBooking = await bookingApi.getBooking(bookingId);
-
-      if (existingBooking.status() === 200) {
-        const deleteResponse = await bookingApi.deleteBooking(bookingId, token);
-        expect(deleteResponse.status()).toBe(201);
-
-        const verificationResponse = await bookingApi.getBooking(bookingId);
-        expect(verificationResponse.status()).toBe(404);
-      } else if (existingBooking.status() !== 404) {
-        throw new Error(
-          `Unable to verify booking before cleanup: HTTP ${existingBooking.status()}`,
-        );
-      }
+      const token = authToken;
+      await cleanupBooking(bookingApi, bookingId, token);
     }
   }
 });
 
 test("PATCH should update one field while preserving all other fields", async ({
-  request,
+  bookingApi,
+  authToken,
 }) => {
-  const username = process.env.API_USERNAME;
-  const password = process.env.API_PASSWORD;
-
-  if (!username || !password)
-    throw new Error("API credentials are not configured");
-
-  const tokenManager = new TokenManager(request, {
-    username,
-    password,
-  });
-
-  const token = await tokenManager.getToken();
-
-  const bookingApi = new BookingApi(request, tokenManager);
-
   let bookingId: number | undefined;
   try {
     // Arrange: create a booking we control.
@@ -114,13 +74,13 @@ test("PATCH should update one field while preserving all other fields", async ({
     expect(createResponse.status()).toBe(200);
 
     const createdBooking = (await createResponse.json()) as BookingResponse;
-    const bookingId: number = createdBooking.bookingid;
+    bookingId = createdBooking.bookingid;
 
     // Act: update only the price.
     const patchResponse = await bookingApi.partiallyUpdateBooking(
       bookingId,
       { totalprice: 450 },
-      token,
+      authToken,
     );
     expect(patchResponse.status()).toBe(200);
 
@@ -143,19 +103,8 @@ test("PATCH should update one field while preserving all other fields", async ({
     );
   } finally {
     if (bookingId !== undefined) {
-      const existingBooking = await bookingApi.getBooking(bookingId);
-
-      if (existingBooking.status() === 200) {
-        const deleteResponse = await bookingApi.deleteBooking(bookingId, token);
-        expect(deleteResponse.status()).toBe(201);
-
-        const verificationResponse = await bookingApi.getBooking(bookingId);
-        expect(verificationResponse.status()).toBe(404);
-      } else if (existingBooking.status() !== 404) {
-        throw new Error(
-          `Unable to verify booking before cleanup: HTTP ${existingBooking.status()}`,
-        );
-      }
+      const token = authToken;
+      await cleanupBooking(bookingApi, bookingId, token);
     }
   }
 });
