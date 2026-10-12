@@ -1,6 +1,8 @@
 # Restful Booker API Quality Engineering
 
-**TypeScript · Playwright Test · REST API Automation · Authentication Resilience · Concurrency · Contract Validation**
+[![API Tests](https://github.com/marinadantis/restful-booker-qa/actions/workflows/playwright.yml/badge.svg)](https://github.com/marinadantis/restful-booker-qa/actions/workflows/playwright.yml)
+
+**TypeScript · Playwright Test · API Testing · Authentication Resilience · Concurrency · Contract Validation**
 
 A TypeScript-based API quality engineering framework built with Playwright Test to evaluate authentication lifecycle management, booking business rules, update semantics, concurrency behavior, and resilience against shared-environment instability.
 
