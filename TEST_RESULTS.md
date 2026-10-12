@@ -4,17 +4,8 @@
 **Assessment:** Senior Engineer – Technology Quality Assurance  
 **Framework:** TypeScript + Playwright Test  
 **Target API:** https://restful-booker.herokuapp.com
-
----
-
-## Test Execution Summary
-
 **Date:** October 12, 2026  
-**Total Tests:** 17 tests  
-**Passed:** 17 tests (100%, including expected failures)  
-**Expected Failures:** 2 tests — API validation issues identified  
-**TypeScript Type Check:** Passed  
-**Execution Time:** 27.2 seconds
+---
 
 ## Executive Summary
 
