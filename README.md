@@ -359,7 +359,7 @@ Scenarios include:
 - Validating the returned booking structure.
 - Checking booking-date formats and business invariants.
 - Characterizing duplicate booking behavior through independent API contexts.
-- Testing reversed check-in and check-out dates.
+- Characterizing reversed check-in and check-out dates.
 - Characterizing overlapping date behavior.
 - Testing negative prices and missing required fields.
 

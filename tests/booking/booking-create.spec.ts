@@ -170,7 +170,7 @@ test("should characterize duplicate booking behaviour across independent API con
   }
 });
 
-test("should reject bookings with reversed dates", async ({
+test("characterises API behaviour for reversed booking dates", async ({
   bookingApi,
   authToken,
 }) => {
