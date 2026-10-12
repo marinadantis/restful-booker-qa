@@ -252,21 +252,25 @@ test("characterises API behaviour for overlapping booking dates", async ({
   }
 });
 
-test.fail("should reject a booking with a negative price", async ({
-  bookingApi,
-}) => {
-  const booking = createBooking({ totalprice: -100 });
+test.fail(
+  "should reject a booking with a negative price",
+  async ({ bookingApi }) => {
+    const booking = createBooking({ totalprice: -100 });
 
-  const response = await bookingApi.createBooking(booking);
+    const response = await bookingApi.createBooking(booking);
 
-  expect([400, 422]).toContain(response.status());
-});
+    expect([400, 422]).toContain(response.status());
+  },
+);
 
-test.fail("should reject a booking without a first name", async ({ bookingApi }) => {
-  const booking = createBooking();
-  const { firstname, ...invalidBooking } = booking;
+test.fail(
+  "should reject a booking without a first name",
+  async ({ bookingApi }) => {
+    const booking = createBooking();
+    const { firstname, ...invalidBooking } = booking;
 
-  const response = await bookingApi.createBooking(invalidBooking as Booking);
+    const response = await bookingApi.createBooking(invalidBooking as Booking);
 
-  expect([400, 422]).toContain(response.status());
-});
+    expect([400, 422]).toContain(response.status());
+  },
+);
