@@ -210,8 +210,6 @@ Recover missing prerequisites and remove test-created resources where possible.
 └── README.md
 ```
 
-> The `.env` file is local configuration and should not be committed. The structure above reflects the current project organization; update it if files are renamed or added.
-
 ### Component responsibilities
 
 | Component               | Responsibility                                                                                  |
@@ -816,7 +814,7 @@ Senior Quality Engineer | SDET | Test Automation | Quality Engineering
 
 This project was developed as part of a Senior Engineer – Technology Quality Assurance take-home assessment, demonstrating a risk-based approach to API testing, authentication resilience, concurrency, and test automation architecture.
 
-- **LinkedIn:** [Marina Dantis](https://www.linkedin.com/)
+- **LinkedIn:** [Marina Dantis](https://www.linkedin.com/in/marina-dantis/)
 - **Focus areas:** API Quality Engineering, Test Automation, TypeScript, Playwright, CI/CD, and Software Quality.
 
 ---
