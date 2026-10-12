@@ -120,21 +120,34 @@ Using a single framework for API requests and test orchestration avoids unnecess
 The framework follows a layered architecture that separates test intent from implementation details.
 
 ```text
-                    Playwright Test Suites
-                             |
-                             v
-                      API Test Fixtures
-                             |
-                 +-----------+-----------+
-                 |                       |
-                 v                       v
-           Token Manager             Booking API
-                 |                       |
-                 v                       v
-          Authentication           HTTP Operations
-                                         |
-                                         v
-                                Restful-Booker API
+                  ┌────────────────────────┐
+                  │   Playwright Test      │
+                  │       Suites           │
+                  └────────────┬───────────┘
+                               │
+                               ▼
+                  ┌────────────────────────┐
+                  │     API Fixtures       │
+                  │  Dependency Injection  │
+                  └────────────┬───────────┘
+                               │
+                  ┌────────────┴────────────┐
+                  │                         │
+                  ▼                         ▼
+       ┌────────────────────┐   ┌────────────────────┐
+       │   Token Manager    │◄──│     Booking API    │
+       │                    │   │                    │
+       │ • Token caching    │   │ • CRUD operations  │
+       │ • Request dedupe   │   │ • HTTP handling   │
+       │ • Token refresh    │   │ • Bounded retries  │
+       └─────────┬──────────┘   └─────────┬──────────┘
+                 │                         │
+                 │                         │
+                 ▼                         ▼
+       ┌────────────────────┐   ┌────────────────────┐
+       │  Authentication    │   │  Restful-Booker    │
+       │      Endpoint      │   │  Booking Endpoint  │
+       └────────────────────┘   └────────────────────┘
 ```
 
 Supporting components provide typed data models, payload validation, resource recovery, and cleanup.
