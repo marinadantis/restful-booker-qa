@@ -138,7 +138,7 @@ The framework follows a layered architecture that separates test intent from imp
        │   Token Manager    │◄──│     Booking API    │
        │                    │   │                    │
        │ • Token caching    │   │ • CRUD operations  │
-       │ • Request dedupe   │   │ • HTTP handling   │
+       │ • Request dedupe   │   │ • HTTP handling    │
        │ • Token refresh    │   │ • Bounded retries  │
        └─────────┬──────────┘   └─────────┬──────────┘
                  │                         │
