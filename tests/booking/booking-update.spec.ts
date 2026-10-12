@@ -2,6 +2,7 @@ import { test, expect } from "../fixtures/api-fixtures";
 import { createBooking } from "../fixtures/booking-data";
 import { Booking, BookingResponse } from "../../src/types/booking";
 import { cleanupBooking } from "../helpers/booking-cleanup";
+import { ensureBookingExists } from "../helpers/booking-recovery";
 
 test("PUT should be idempotent when the same payload is sent three times", async ({
   bookingApi,
@@ -9,8 +10,12 @@ test("PUT should be idempotent when the same payload is sent three times", async
 }) => {
   let bookingId: number | undefined;
   try {
-    // Arrange: create a booking we control.
-    const initialBooking = createBooking();
+    // Arrange: create a booking with a known initial state.
+    const initialBooking = createBooking({
+      totalprice: 200,
+      depositpaid: false,
+      additionalneeds: "Initial booking",
+    });
 
     const createResponse = await bookingApi.createBooking(initialBooking);
     expect(createResponse.status()).toBe(200);
@@ -18,8 +23,8 @@ test("PUT should be idempotent when the same payload is sent three times", async
     const createBody = (await createResponse.json()) as BookingResponse;
     bookingId = createBody.bookingid;
 
-    // Act: define the complete replacement payload.
-    const updatedBooking = {
+    // Define the complete replacement payload.
+    const updatedBooking: Booking = {
       ...initialBooking,
       totalprice: 350,
       depositpaid: true,
@@ -28,7 +33,7 @@ test("PUT should be idempotent when the same payload is sent three times", async
 
     const snapshots: Booking[] = [];
 
-    // Repeat exactly the same PUT request three times.
+    // Act: send the exact same PUT payload three times.
     for (let attempt = 1; attempt <= 3; attempt++) {
       const updateResponse = await bookingApi.updateBooking(
         bookingId,
@@ -50,13 +55,12 @@ test("PUT should be idempotent when the same payload is sent three times", async
       snapshots.push(persistedBooking);
     }
 
-    // Assert: the resource representation remains identical.
+    // Assert: every repeated PUT leaves the resource in the same state.
     expect(snapshots[1]).toEqual(snapshots[0]);
     expect(snapshots[2]).toEqual(snapshots[0]);
   } finally {
     if (bookingId !== undefined) {
-      const token = authToken;
-      await cleanupBooking(bookingApi, bookingId, token);
+      await cleanupBooking(bookingApi, bookingId, authToken);
     }
   }
 });
@@ -67,44 +71,45 @@ test("PATCH should update one field while preserving all other fields", async ({
 }) => {
   let bookingId: number | undefined;
   try {
-    // Arrange: create a booking we control.
-    const originalBooking = createBooking();
+    // Arrange: create a booking with known values.
+    const initialBooking = createBooking({
+      totalprice: 200,
+      depositpaid: false,
+      additionalneeds: "Initial booking",
+    });
 
-    const createResponse = await bookingApi.createBooking(originalBooking);
+    const createResponse = await bookingApi.createBooking(initialBooking);
     expect(createResponse.status()).toBe(200);
 
     const createdBooking = (await createResponse.json()) as BookingResponse;
     bookingId = createdBooking.bookingid;
 
-    // Act: update only the price.
+    // Act: modify only totalprice.
+    const updatedPrice = 450;
+
     const patchResponse = await bookingApi.partiallyUpdateBooking(
       bookingId,
-      { totalprice: 450 },
+      { totalprice: updatedPrice },
       authToken,
     );
     expect(patchResponse.status()).toBe(200);
+    const patchBody = (await patchResponse.json()) as Booking;
+    expect(patchBody.totalprice).toBe(updatedPrice);
 
-    // Assert: retrieve the persisted resource.
+    // Assert: retrieve and verify the complete persisted booking.
     const getResponse = await bookingApi.getBooking(bookingId);
     expect(getResponse.status()).toBe(200);
 
-    const actualBooking = await getResponse.json();
+    const persistedBooking = (await getResponse.json()) as Booking;
 
-    // The changed field must contain the new value.
-    expect(actualBooking.totalprice).toBe(450);
-
-    // Every other field must remain unchanged.
-    expect(actualBooking.firstname).toEqual(originalBooking.firstname);
-    expect(actualBooking.lastname).toEqual(originalBooking.lastname);
-    expect(actualBooking.depositpaid).toEqual(originalBooking.depositpaid);
-    expect(actualBooking.bookingdates).toEqual(originalBooking.bookingdates);
-    expect(actualBooking.additionalneeds).toEqual(
-      originalBooking.additionalneeds,
-    );
+    // The complete object must match the original, except for totalprice.
+    expect(persistedBooking).toEqual({
+      ...initialBooking,
+      totalprice: updatedPrice,
+    });
   } finally {
     if (bookingId !== undefined) {
-      const token = authToken;
-      await cleanupBooking(bookingApi, bookingId, token);
+      await cleanupBooking(bookingApi, bookingId, authToken);
     }
   }
 });
