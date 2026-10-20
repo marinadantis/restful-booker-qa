@@ -170,7 +170,7 @@ test("should characterize duplicate booking behaviour across independent API con
   }
 });
 
-test("characterises API behaviour for reversed booking dates", async ({
+test("should characterize API behaviour for reversed booking dates", async ({
   bookingApi,
   authToken,
 }) => {
@@ -198,7 +198,7 @@ test("characterises API behaviour for reversed booking dates", async ({
   }
 });
 
-test("characterises API behaviour for overlapping booking dates", async ({
+test("should characterize API behaviour for overlapping booking dates", async ({
   bookingApi,
   authToken,
 }) => {

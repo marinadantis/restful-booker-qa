@@ -29,6 +29,7 @@ export class TokenManager {
     try {
       return await this.tokenPromise;
     } finally {
+      // Clear only the promise we awaited.
       if (this.tokenPromise === pendingToken) this.tokenPromise = null;
     }
   }

@@ -141,9 +141,9 @@ The framework follows a layered architecture that separates test intent from imp
        │ • Request dedupe   │   │ • HTTP handling    │
        │ • Token refresh    │   │ • Bounded retries  │
        └─────────┬──────────┘   └─────────┬──────────┘
-                 │                         │
-                 │                         │
-                 ▼                         ▼
+                 │                        │
+                 │                        │
+                 ▼                        ▼
        ┌────────────────────┐   ┌────────────────────┐
        │  Authentication    │   │  Restful-Booker    │
        │      Endpoint      │   │  Booking Endpoint  │
